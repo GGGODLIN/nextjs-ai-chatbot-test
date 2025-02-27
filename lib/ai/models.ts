@@ -1,5 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import { fireworks } from '@ai-sdk/fireworks';
+import { google } from '@ai-sdk/google';
 import {
   customProvider,
   extractReasoningMiddleware,
@@ -16,6 +17,7 @@ export const myProvider = customProvider({
       model: fireworks('accounts/fireworks/models/deepseek-r1'),
       middleware: extractReasoningMiddleware({ tagName: 'think' }),
     }),
+    'chat-model-gemini': google('gemini-2.0-flash'),
     'title-model': openai('gpt-4-turbo'),
     'artifact-model': openai('gpt-4o-mini'),
   },
@@ -46,5 +48,10 @@ export const chatModels: Array<ChatModel> = [
     id: 'chat-model-reasoning',
     name: 'Reasoning model',
     description: 'Uses advanced reasoning',
+  },
+  {
+    id: 'chat-model-gemini',
+    name: 'Gemini model',
+    description: 'Uses Gemini AI',
   },
 ];

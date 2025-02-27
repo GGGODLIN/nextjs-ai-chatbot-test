@@ -56,6 +56,7 @@ export async function saveChat({
   userId: string;
   title: string;
 }) {
+  console.log('saving chat', id, userId, title);
   try {
     return await db.insert(chat).values({
       id,
