@@ -91,7 +91,8 @@ export async function submitShopifyStore(storeName: string) {
             html: finalResponseText,
             variantId: variantId,
             redirectCount: redirectCount,
-            finalUrl: finalUrl
+            finalUrl: finalUrl,
+            storeName: storeName
         };
     } catch (error) {
         return {

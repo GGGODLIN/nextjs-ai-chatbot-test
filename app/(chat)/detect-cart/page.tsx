@@ -43,7 +43,7 @@ export default async function DetectCartPage() {
                     </div>
                 </div>
 
-                <DetectCartForm onSubmit={handleSubmit} />
+                <DetectCartForm onSubmit={handleSubmit} selectedModelId={selectedModelId} />
 
             </div>
         </div>

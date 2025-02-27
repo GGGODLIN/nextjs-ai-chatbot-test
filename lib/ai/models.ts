@@ -18,6 +18,7 @@ export const myProvider = customProvider({
       middleware: extractReasoningMiddleware({ tagName: 'think' }),
     }),
     'chat-model-gemini': google('gemini-2.0-flash'),
+    'chat-model-gemini-pro': google('gemini-2.0-pro-exp-02-05'),
     'title-model': openai('gpt-4-turbo'),
     'artifact-model': openai('gpt-4o-mini'),
   },
@@ -36,22 +37,27 @@ interface ChatModel {
 export const chatModels: Array<ChatModel> = [
   {
     id: 'chat-model-small',
-    name: 'Small model',
+    name: 'gpt-4o-mini',
     description: 'Small model for fast, lightweight tasks',
   },
   {
     id: 'chat-model-large',
-    name: 'Large model',
+    name: 'gpt-4o',
     description: 'Large model for complex, multi-step tasks',
   },
   {
     id: 'chat-model-reasoning',
-    name: 'Reasoning model',
+    name: 'deepseek-r1',
     description: 'Uses advanced reasoning',
   },
   {
     id: 'chat-model-gemini',
-    name: 'Gemini model',
+    name: 'gemini-2.0-flash',
     description: 'Uses Gemini AI',
+  },
+  {
+    id: 'chat-model-gemini-pro',
+    name: 'gemini-2.0-pro-exp-02-05',
+    description: 'Uses Gemini AI Pro',
   },
 ];
