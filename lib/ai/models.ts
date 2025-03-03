@@ -2,6 +2,7 @@ import { openai } from '@ai-sdk/openai';
 import { fireworks } from '@ai-sdk/fireworks';
 import { google } from '@ai-sdk/google';
 import { anthropic } from '@ai-sdk/anthropic';
+import { deepseek } from '@ai-sdk/deepseek';
 import {
   customProvider,
   extractReasoningMiddleware,
@@ -18,6 +19,7 @@ export const myProvider = customProvider({
       model: fireworks('accounts/fireworks/models/deepseek-r1'),
       middleware: extractReasoningMiddleware({ tagName: 'think' }),
     }),
+    'chat-model-deepseek': deepseek('deepseek-reasoner'),
     'chat-model-gemini': google('gemini-2.0-flash'),
     'chat-model-gemini-pro': google('gemini-2.0-pro-exp-02-05'),
     'chat-model-claude': anthropic('claude-3-7-sonnet-20250219'),
@@ -51,6 +53,11 @@ export const chatModels: Array<ChatModel> = [
     id: 'chat-model-reasoning',
     name: 'deepseek-r1',
     description: 'Uses advanced reasoning',
+  },
+  {
+    id: 'chat-model-deepseek',
+    name: 'deepseek-reasoner',
+    description: 'Uses DeepSeek Reasoner(R1)',
   },
   {
     id: 'chat-model-gemini',

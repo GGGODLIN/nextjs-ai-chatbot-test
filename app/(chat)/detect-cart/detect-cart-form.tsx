@@ -91,8 +91,32 @@ export function DetectCartForm({ onSubmit, selectedModelId, selectedModelIds = [
         }
     }
 
+    // 簡化 HTML 函數
+    function simplifyHtml(html: string): string {
+        let simplifiedHtml = html;
+
+        // 提取<body>標籤內的內容
+        const bodyMatch = simplifiedHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+        if (bodyMatch && bodyMatch[1]) {
+            simplifiedHtml = bodyMatch[1].trim();
+        }
+
+        // 移除所有<script>標籤內的內容
+        simplifiedHtml = simplifiedHtml.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+
+        // 移除所有<style>標籤內的內容
+        simplifiedHtml = simplifiedHtml.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+
+        // 移除所有<svg>標籤內的內容
+        simplifiedHtml = simplifiedHtml.replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, '');
+
+        return simplifiedHtml;
+    }
+
     async function analyzeHtmlWithAI() {
         if (!result?.html) return
+
+        const html = simplifyHtml(result.html);
 
         try {
             setAnalyzing(true)
@@ -101,7 +125,7 @@ export function DetectCartForm({ onSubmit, selectedModelId, selectedModelIds = [
             const prompt = `分析以下 Shopify 購物車 HTML，判斷 subtotal element 有可能是哪個，給出 querySelector：
 
 \`\`\`html
-${result.html}
+${html}
 \`\`\``
 
             const response = await fetch('/detect-cart/api/analyze-html', {
@@ -173,13 +197,15 @@ ${result.html}
     async function analyzeWithAllModels() {
         if (!result?.html || localModelIds.length === 0) return
 
+        const html = simplifyHtml(result.html);
+
         setAnalyzing(true)
         setAiResponse(null)
 
         const prompt = `分析以下 Shopify 購物車 HTML，判斷 subtotal element 有可能是哪個，給出 querySelector：
 
 \`\`\`html
-${result.html}
+${html}
 \`\`\``
 
         // 創建一個新的結果數組，保留不在當前選擇中的模型結果
