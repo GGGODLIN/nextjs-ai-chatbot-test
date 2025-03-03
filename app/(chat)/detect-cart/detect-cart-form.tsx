@@ -121,6 +121,7 @@ export function DetectCartForm({ onSubmit, selectedModelId, selectedModelIds = [
         try {
             setAnalyzing(true)
             setAiResponse(null)
+            setModelResults([])
 
             const prompt = `分析以下 Shopify 購物車 HTML，判斷 subtotal element 有可能是哪個，給出 querySelector：
 

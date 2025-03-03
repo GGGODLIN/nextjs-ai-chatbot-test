@@ -15,11 +15,12 @@ export const myProvider = customProvider({
   languageModels: {
     'chat-model-small': openai('gpt-4o-mini'),
     'chat-model-large': openai('gpt-4o'),
-    'chat-model-reasoning': wrapLanguageModel({
-      model: fireworks('accounts/fireworks/models/deepseek-r1'),
-      middleware: extractReasoningMiddleware({ tagName: 'think' }),
-    }),
-    'chat-model-deepseek': deepseek('deepseek-reasoner'),
+    // 'chat-model-reasoning': wrapLanguageModel({
+    //   model: fireworks('accounts/fireworks/models/deepseek-r1'),
+    //   middleware: extractReasoningMiddleware({ tagName: 'think' }),
+    // }),
+    'chat-model-deepseek-r1': deepseek('deepseek-reasoner'),
+    'chat-model-deepseek-v3': deepseek('deepseek-chat'),
     'chat-model-gemini': google('gemini-2.0-flash'),
     'chat-model-gemini-pro': google('gemini-2.0-pro-exp-02-05'),
     'chat-model-claude': anthropic('claude-3-7-sonnet-20250219'),
@@ -49,13 +50,19 @@ export const chatModels: Array<ChatModel> = [
     name: 'gpt-4o',
     description: 'Large model for complex, multi-step tasks',
   },
+  // {
+  //   id: 'chat-model-reasoning',
+  //   name: 'deepseek-r1',
+  //   description: 'Uses advanced reasoning',
+  // },
+
   {
-    id: 'chat-model-reasoning',
-    name: 'deepseek-r1',
-    description: 'Uses advanced reasoning',
+    id: 'chat-model-deepseek-v3',
+    name: 'deepseek-chat',
+    description: 'Uses DeepSeek Chat(V3)',
   },
   {
-    id: 'chat-model-deepseek',
+    id: 'chat-model-deepseek-r1',
     name: 'deepseek-reasoner',
     description: 'Uses DeepSeek Reasoner(R1)',
   },
