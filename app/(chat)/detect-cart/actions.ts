@@ -1,5 +1,7 @@
 'use server';
 
+import { cookies } from 'next/headers';
+
 export async function submitShopifyStore(storeName: string) {
     const response = await fetch(`https://${storeName}.myshopify.com/products.json`);
     const products = await response.json();
@@ -101,4 +103,10 @@ export async function submitShopifyStore(storeName: string) {
             variantId: variantId
         };
     }
+}
+
+// 新增保存多模型選擇的 server action
+export async function saveDetectCartModelsAsCookie(models: string[]) {
+    const cookieStore = await cookies();
+    cookieStore.set('detect-cart-models', JSON.stringify(models));
 }
