@@ -38,6 +38,12 @@ export function MultiModelSelector({
 
     // 切換模型選擇狀態
     const toggleModelSelection = (modelId: string) => {
+        // 檢查是否嘗試取消選擇最後一個模型
+        if (optimisticModelIds.includes(modelId) && optimisticModelIds.length === 1) {
+            // 如果是最後一個模型，不允許取消選擇
+            return;
+        }
+
         const newSelection = optimisticModelIds.includes(modelId)
             ? optimisticModelIds.filter(id => id !== modelId)
             : [...optimisticModelIds, modelId];
