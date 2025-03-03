@@ -1,6 +1,7 @@
 import { openai } from '@ai-sdk/openai';
 import { fireworks } from '@ai-sdk/fireworks';
 import { google } from '@ai-sdk/google';
+import { anthropic } from '@ai-sdk/anthropic';
 import {
   customProvider,
   extractReasoningMiddleware,
@@ -19,6 +20,7 @@ export const myProvider = customProvider({
     }),
     'chat-model-gemini': google('gemini-2.0-flash'),
     'chat-model-gemini-pro': google('gemini-2.0-pro-exp-02-05'),
+    'chat-model-claude': anthropic('claude-3-7-sonnet-20250219'),
     'title-model': openai('gpt-4-turbo'),
     'artifact-model': openai('gpt-4o-mini'),
   },
@@ -53,11 +55,16 @@ export const chatModels: Array<ChatModel> = [
   {
     id: 'chat-model-gemini',
     name: 'gemini-2.0-flash',
-    description: 'Uses Gemini AI',
+    description: 'Uses Gemini 2.0 Flash',
   },
   {
     id: 'chat-model-gemini-pro',
     name: 'gemini-2.0-pro-exp-02-05',
-    description: 'Uses Gemini AI Pro',
+    description: 'Uses Gemini 2.0 Pro',
+  },
+  {
+    id: 'chat-model-claude',
+    name: 'claude-3-7-sonnet-20250219',
+    description: 'Uses Claude 3.7 Sonnet',
   },
 ];

@@ -138,10 +138,9 @@ ${result.html}
             const data = await response.json()
             setAiResponse(data.response)
 
-            // 添加到模型結果中
+            // 添加到模型結果中，刪除所有舊資料，只保留最新結果
             const modelName = chatModels.find(model => model.id === currentModelId)?.name || currentModelId
-            setModelResults(prev => [
-                ...prev.filter(r => r.modelId !== currentModelId), // 移除相同模型的舊結果
+            setModelResults([
                 {
                     modelId: currentModelId,
                     modelName,
@@ -450,7 +449,7 @@ ${result.html}
                             )}
 
                             {/* 顯示多模型分析結果 */}
-                            {modelResults.length > 0 && (
+                            {modelResults.length > 1 && (
                                 <div className="space-y-4">
                                     <h4 className="font-medium">多模型分析結果:</h4>
 
