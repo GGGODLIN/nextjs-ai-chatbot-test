@@ -31,6 +31,7 @@ interface ModelAnalysisResult {
     response: string
     error?: string
     timestamp: number
+    processing?: boolean
 }
 
 export function DetectCartForm({ onSubmit, selectedModelId, selectedModelIds = [] }: DetectCartFormProps) {
@@ -214,8 +215,21 @@ ${html}
         setModelResults(newResults)
 
         // 為每個選擇的模型創建一個分析請求
-        const analysisPromises = localModelIds.map(async (modelId) => {
+        localModelIds.forEach(async (modelId) => {
             try {
+                // 添加一個"正在處理"的佔位結果
+                const modelName = chatModels.find(model => model.id === modelId)?.name || modelId
+                setModelResults(prev => [
+                    ...prev,
+                    {
+                        modelId,
+                        modelName,
+                        response: '分析中...',
+                        processing: true,
+                        timestamp: Date.now()
+                    }
+                ])
+
                 const response = await fetch('/detect-cart/api/analyze-html', {
                     method: 'POST',
                     headers: {
@@ -247,34 +261,46 @@ ${html}
                 }
 
                 const data = await response.json()
-                const modelName = chatModels.find(model => model.id === modelId)?.name || modelId
 
-                return {
-                    modelId,
-                    modelName,
-                    response: data.response,
-                    timestamp: Date.now()
-                }
+                // 更新結果，替換"正在處理"的佔位結果
+                setModelResults(prev => [
+                    ...prev.filter(r => r.modelId !== modelId),
+                    {
+                        modelId,
+                        modelName,
+                        response: data.response,
+                        timestamp: Date.now()
+                    }
+                ])
             } catch (error) {
                 console.error(`使用模型 ${modelId} 分析時出錯:`, error)
                 const modelName = chatModels.find(model => model.id === modelId)?.name || modelId
 
-                return {
-                    modelId,
-                    modelName,
-                    response: '',
-                    error: error instanceof Error ? error.message : '未知錯誤',
-                    timestamp: Date.now()
-                }
+                // 更新結果，替換"正在處理"的佔位結果，顯示錯誤
+                setModelResults(prev => [
+                    ...prev.filter(r => r.modelId !== modelId),
+                    {
+                        modelId,
+                        modelName,
+                        response: '',
+                        error: error instanceof Error ? error.message : '未知錯誤',
+                        timestamp: Date.now()
+                    }
+                ])
             }
         })
 
-        // 等待所有請求完成
-        const results = await Promise.all(analysisPromises)
-
-        // 更新結果
-        setModelResults(prev => [...prev, ...results])
-        setAnalyzing(false)
+        // 檢查所有請求是否完成
+        const checkAllCompleted = setInterval(() => {
+            setModelResults(current => {
+                // 如果沒有正在處理的結果，則停止分析狀態
+                if (!current.some(r => r.processing)) {
+                    setAnalyzing(false)
+                    clearInterval(checkAllCompleted)
+                }
+                return current
+            })
+        }, 500)
     }
 
     function copyToClipboard(text: string) {
@@ -294,45 +320,7 @@ ${html}
 
         const newWindow = window.open('', '_blank')
         if (newWindow) {
-            newWindow.document.write(`
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>${result.storeName || '購物車'} HTML 預覽</title>
-                    <style>
-                        body {
-                            font-family: monospace;
-                            white-space: pre-wrap;
-                            padding: 20px;
-                        }
-                        .toolbar {
-                            position: fixed;
-                            top: 0;
-                            left: 0;
-                            right: 0;
-                            background: #f0f0f0;
-                            padding: 10px;
-                            border-bottom: 1px solid #ddd;
-                            display: flex;
-                            justify-content: space-between;
-                            align-items: center;
-                        }
-                        .content {
-                            margin-top: 50px;
-                        }
-                    </style>
-                </head>
-                <body>
-                    <div class="toolbar">
-                        <h3>${result.storeName || '購物車'} HTML 內容</h3>
-                        <button onclick="document.execCommand('selectAll'); document.execCommand('copy');">複製全部</button>
-                    </div>
-                    <div class="content">
-                        ${result.html.replace(/</g, '&lt;').replace(/>/g, '&gt;')}
-                    </div>
-                </body>
-                </html>
-            `)
+            newWindow.document.write(result.html)
             newWindow.document.close()
         } else {
             alert('無法打開新視窗，請檢查您的瀏覽器設置。')
@@ -386,7 +374,7 @@ ${html}
 
                             {result.html && (
                                 <div className="flex flex-wrap justify-center gap-2">
-                                    <button
+                                    {selectedModelsCount === 1 && <button
                                         onClick={analyzeHtmlWithAI}
                                         disabled={analyzing}
                                         className="bg-green-600 text-white hover:bg-green-700 px-4 py-2 rounded-md flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -409,7 +397,7 @@ ${html}
                                                 使用 {currentModelName} 分析 HTML
                                             </>
                                         )}
-                                    </button>
+                                    </button>}
 
                                     {selectedModelsCount > 1 && (
                                         <button
@@ -476,17 +464,27 @@ ${html}
                             )}
 
                             {/* 顯示多模型分析結果 */}
-                            {modelResults.length > 1 && (
+                            {modelResults.length > 0 && (
                                 <div className="space-y-4">
                                     <h4 className="font-medium">多模型分析結果:</h4>
 
                                     {modelResults
-                                        .sort((a, b) => b.timestamp - a.timestamp) // 按時間戳排序，最新的在前
+                                        // 不再按時間戳排序，保持原始順序
                                         .map((result, index) => (
                                             <div key={`${result.modelId}-${result.timestamp}`} className="p-4 bg-blue-50 text-blue-800 rounded-md">
                                                 <div className="flex justify-between items-center mb-2">
-                                                    <h5 className="font-medium">{result.modelName}:</h5>
-                                                    {result.response && (
+                                                    <h5 className="font-medium">
+                                                        {result.modelName}
+                                                        {result.processing && (
+                                                            <span className="ml-2 inline-block">
+                                                                <svg className="animate-spin h-4 w-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                </svg>
+                                                            </span>
+                                                        )}
+                                                    </h5>
+                                                    {!result.processing && result.response && (
                                                         <button
                                                             onClick={() => copyToClipboard(result.response)}
                                                             className="text-xs bg-blue-200 hover:bg-blue-300 px-2 py-1 rounded"
@@ -500,7 +498,9 @@ ${html}
                                                         錯誤: {result.error}
                                                     </div>
                                                 ) : (
-                                                    <div className="whitespace-pre-wrap text-sm">{result.response}</div>
+                                                    <div className="whitespace-pre-wrap text-sm">
+                                                        {result.processing ? '分析中...' : result.response}
+                                                    </div>
                                                 )}
                                             </div>
                                         ))
