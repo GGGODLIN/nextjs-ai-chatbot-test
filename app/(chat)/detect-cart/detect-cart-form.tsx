@@ -162,6 +162,7 @@ ${html}
             }
 
             const data = await response.json()
+            console.log('data', data)
             setAiResponse(data.response)
 
             // 添加到模型結果中，刪除所有舊資料，只保留最新結果
@@ -199,37 +200,33 @@ ${html}
     async function analyzeWithAllModels() {
         if (!result?.html || localModelIds.length === 0) return
 
-        const html = simplifyHtml(result.html);
-
         setAnalyzing(true)
         setAiResponse(null)
 
         const prompt = `分析以下 Shopify 購物車 HTML，判斷 subtotal element 有可能是哪個，給出 querySelector：
 
 \`\`\`html
-${html}
+${result.html}
 \`\`\``
 
         // 創建一個新的結果數組，保留不在當前選擇中的模型結果
         const newResults = modelResults.filter(r => !localModelIds.includes(r.modelId))
         setModelResults(newResults)
 
-        // 為每個選擇的模型創建一個分析請求
-        localModelIds.forEach(async (modelId) => {
-            try {
-                // 添加一個"正在處理"的佔位結果
-                const modelName = chatModels.find(model => model.id === modelId)?.name || modelId
-                setModelResults(prev => [
-                    ...prev,
-                    {
-                        modelId,
-                        modelName,
-                        response: '分析中...',
-                        processing: true,
-                        timestamp: Date.now()
-                    }
-                ])
+        // 過濾掉禁用的模型
+        const enabledModelIds = localModelIds.filter(modelId =>
+            !chatModels.find(model => model.id === modelId)?.disabled
+        )
 
+        // 如果沒有啟用的模型，則提前結束
+        if (enabledModelIds.length === 0) {
+            setAnalyzing(false)
+            return
+        }
+
+        // 為每個選擇的模型創建一個分析請求
+        const analysisPromises = enabledModelIds.map(async (modelId) => {
+            try {
                 const response = await fetch('/detect-cart/api/analyze-html', {
                     method: 'POST',
                     headers: {
@@ -237,7 +234,8 @@ ${html}
                     },
                     body: JSON.stringify({
                         prompt,
-                        model: modelId
+                        model: modelId,
+                        max_tokens: 1000 // 使用默認值，因為 maxTokens 未定義
                     })
                 })
 
@@ -261,46 +259,48 @@ ${html}
                 }
 
                 const data = await response.json()
+                const modelName = chatModels.find(model => model.id === modelId)?.name || modelId
 
-                // 更新結果，替換"正在處理"的佔位結果
-                setModelResults(prev => [
-                    ...prev.filter(r => r.modelId !== modelId),
-                    {
-                        modelId,
-                        modelName,
-                        response: data.response,
-                        timestamp: Date.now()
-                    }
-                ])
+                return {
+                    modelId,
+                    modelName,
+                    response: data.response,
+                    timestamp: Date.now()
+                }
             } catch (error) {
                 console.error(`使用模型 ${modelId} 分析時出錯:`, error)
                 const modelName = chatModels.find(model => model.id === modelId)?.name || modelId
 
-                // 更新結果，替換"正在處理"的佔位結果，顯示錯誤
-                setModelResults(prev => [
-                    ...prev.filter(r => r.modelId !== modelId),
-                    {
-                        modelId,
-                        modelName,
-                        response: '',
-                        error: error instanceof Error ? error.message : '未知錯誤',
-                        timestamp: Date.now()
-                    }
-                ])
+                return {
+                    modelId,
+                    modelName,
+                    response: '',
+                    error: error instanceof Error ? error.message : '未知錯誤',
+                    timestamp: Date.now()
+                }
             }
         })
 
-        // 檢查所有請求是否完成
-        const checkAllCompleted = setInterval(() => {
-            setModelResults(current => {
-                // 如果沒有正在處理的結果，則停止分析狀態
-                if (!current.some(r => r.processing)) {
-                    setAnalyzing(false)
-                    clearInterval(checkAllCompleted)
+        // 為禁用的模型添加錯誤信息
+        const disabledResults = localModelIds
+            .filter(modelId => chatModels.find(model => model.id === modelId)?.disabled)
+            .map(modelId => {
+                const model = chatModels.find(m => m.id === modelId)
+                return {
+                    modelId,
+                    modelName: model?.name || modelId,
+                    response: '',
+                    error: model?.disabledReason || '此模型暫時不可用',
+                    timestamp: Date.now()
                 }
-                return current
             })
-        }, 500)
+
+        // 等待所有請求完成
+        const results = await Promise.all(analysisPromises)
+
+        // 更新結果，包括禁用模型的錯誤信息
+        setModelResults(prev => [...prev, ...results, ...disabledResults])
+        setAnalyzing(false)
     }
 
     function copyToClipboard(text: string) {
@@ -464,7 +464,7 @@ ${html}
                             )}
 
                             {/* 顯示多模型分析結果 */}
-                            {modelResults.length > 0 && (
+                            {modelResults.length > 1 && (
                                 <div className="space-y-4">
                                     <h4 className="font-medium">多模型分析結果:</h4>
 

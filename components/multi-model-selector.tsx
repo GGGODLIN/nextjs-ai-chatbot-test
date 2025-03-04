@@ -9,6 +9,12 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { chatModels } from '@/lib/ai/models';
 import { cn } from '@/lib/utils';
 import { saveDetectCartModelsAsCookie } from '@/app/(chat)/detect-cart/actions';
@@ -44,6 +50,12 @@ export function MultiModelSelector({
             return;
         }
 
+        // 檢查模型是否被禁用
+        const model = chatModels.find(m => m.id === modelId);
+        if (model?.disabled) {
+            return; // 如果模型被禁用，不執行任何操作
+        }
+
         const newSelection = optimisticModelIds.includes(modelId)
             ? optimisticModelIds.filter(id => id !== modelId)
             : [...optimisticModelIds, modelId];
@@ -71,9 +83,40 @@ export function MultiModelSelector({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="min-w-[300px]">
                 {chatModels.map((chatModel) => {
-                    const { id } = chatModel;
+                    const { id, disabled, disabledReason } = chatModel;
                     const isSelected = optimisticModelIds.includes(id);
 
+                    // 為禁用的模型創建帶有提示的菜單項
+                    if (disabled) {
+                        return (
+                            <TooltipProvider key={id}>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <div className="px-2 py-1.5 cursor-not-allowed opacity-50">
+                                            <div className="gap-4 group/item flex flex-row justify-between items-center">
+                                                <div className="flex flex-col gap-1 items-start">
+                                                    <div>{chatModel.name}</div>
+                                                    <div className="text-xs text-muted-foreground">
+                                                        {chatModel.description}
+                                                    </div>
+                                                </div>
+                                                {isSelected && (
+                                                    <div className="text-foreground dark:text-foreground">
+                                                        <CheckCircleFillIcon />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        <p>{disabledReason || '此模型暫時不可用'}</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                        );
+                    }
+
+                    // 正常的可選模型
                     return (
                         <DropdownMenuItem
                             key={id}
