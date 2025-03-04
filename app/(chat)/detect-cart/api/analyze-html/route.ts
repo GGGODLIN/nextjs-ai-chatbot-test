@@ -23,7 +23,7 @@ export async function POST(req: Request) {
 
         console.log('rest', rest)
 
-        return NextResponse.json({ response });
+        return NextResponse.json({ ...rest, response });
     } catch (error) {
         console.error('分析 HTML 時出錯:', error);
 

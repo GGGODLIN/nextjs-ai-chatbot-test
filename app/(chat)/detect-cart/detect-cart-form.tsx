@@ -206,7 +206,7 @@ ${html}
         const prompt = `分析以下 Shopify 購物車 HTML，判斷 subtotal element 有可能是哪個，給出 querySelector：
 
 \`\`\`html
-${result.html}
+${simplifyHtml(result.html)}
 \`\`\``
 
         // 創建一個新的結果數組，保留不在當前選擇中的模型結果
@@ -224,8 +224,40 @@ ${result.html}
             return
         }
 
+        // 為禁用的模型添加錯誤信息
+        const disabledResults = localModelIds
+            .filter(modelId => chatModels.find(model => model.id === modelId)?.disabled)
+            .map(modelId => {
+                const model = chatModels.find(m => m.id === modelId)
+                return {
+                    modelId,
+                    modelName: model?.name || modelId,
+                    response: '',
+                    error: model?.disabledReason || '此模型暫時不可用',
+                    timestamp: Date.now()
+                }
+            })
+
+        // 先添加禁用的模型結果
+        setModelResults(prev => [...prev, ...disabledResults])
+
+        // 為每個啟用的模型創建處理中狀態
+        const processingResults = enabledModelIds.map(modelId => {
+            const modelName = chatModels.find(model => model.id === modelId)?.name || modelId
+            return {
+                modelId,
+                modelName,
+                response: '',
+                processing: true,
+                timestamp: Date.now()
+            }
+        })
+
+        // 添加處理中的狀態
+        setModelResults(prev => [...prev, ...processingResults])
+
         // 為每個選擇的模型創建一個分析請求
-        const analysisPromises = enabledModelIds.map(async (modelId) => {
+        enabledModelIds.forEach(async (modelId) => {
             try {
                 const response = await fetch('/detect-cart/api/analyze-html', {
                     method: 'POST',
@@ -261,45 +293,39 @@ ${result.html}
                 const data = await response.json()
                 const modelName = chatModels.find(model => model.id === modelId)?.name || modelId
 
-                return {
-                    modelId,
-                    modelName,
-                    response: data.response,
-                    timestamp: Date.now()
-                }
+                // 更新這個特定模型的結果
+                setModelResults(prev => prev.map(item =>
+                    item.modelId === modelId
+                        ? {
+                            modelId,
+                            modelName,
+                            response: data.response,
+                            timestamp: Date.now(),
+                            processing: false
+                        }
+                        : item
+                ))
             } catch (error) {
                 console.error(`使用模型 ${modelId} 分析時出錯:`, error)
                 const modelName = chatModels.find(model => model.id === modelId)?.name || modelId
 
-                return {
-                    modelId,
-                    modelName,
-                    response: '',
-                    error: error instanceof Error ? error.message : '未知錯誤',
-                    timestamp: Date.now()
-                }
+                // 更新這個特定模型的錯誤結果
+                setModelResults(prev => prev.map(item =>
+                    item.modelId === modelId
+                        ? {
+                            modelId,
+                            modelName,
+                            response: '',
+                            error: error instanceof Error ? error.message : '未知錯誤',
+                            timestamp: Date.now(),
+                            processing: false
+                        }
+                        : item
+                ))
             }
         })
 
-        // 為禁用的模型添加錯誤信息
-        const disabledResults = localModelIds
-            .filter(modelId => chatModels.find(model => model.id === modelId)?.disabled)
-            .map(modelId => {
-                const model = chatModels.find(m => m.id === modelId)
-                return {
-                    modelId,
-                    modelName: model?.name || modelId,
-                    response: '',
-                    error: model?.disabledReason || '此模型暫時不可用',
-                    timestamp: Date.now()
-                }
-            })
-
-        // 等待所有請求完成
-        const results = await Promise.all(analysisPromises)
-
-        // 更新結果，包括禁用模型的錯誤信息
-        setModelResults(prev => [...prev, ...results, ...disabledResults])
+        // 所有請求已經啟動，但可能還沒完成
         setAnalyzing(false)
     }
 
@@ -469,7 +495,14 @@ ${result.html}
                                     <h4 className="font-medium">多模型分析結果:</h4>
 
                                     {modelResults
-                                        // 不再按時間戳排序，保持原始順序
+                                        // 按照處理狀態排序，處理中的放在後面
+                                        .sort((a, b) => {
+                                            // 如果一個在處理中而另一個不是，處理中的放後面
+                                            if (a.processing && !b.processing) return 1;
+                                            if (!a.processing && b.processing) return -1;
+                                            // 否則按時間戳排序，新的在後面
+                                            return a.timestamp - b.timestamp;
+                                        })
                                         .map((result, index) => (
                                             <div key={`${result.modelId}-${result.timestamp}`} className="p-4 bg-blue-50 text-blue-800 rounded-md">
                                                 <div className="flex justify-between items-center mb-2">
