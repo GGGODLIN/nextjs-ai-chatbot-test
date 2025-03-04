@@ -78,6 +78,10 @@ export function DetectCartForm({ onSubmit }: DetectCartFormProps) {
     const [analyzing, setAnalyzing] = useState(false)
     const [aiResponse, setAiResponse] = useState<string | null>(null)
     const [modelResults, setModelResults] = useState<ModelAnalysisResult[]>([])
+    const [combinedAnalysis, setCombinedAnalysis] = useState<string | null>(null)
+    const [analyzingCombined, setAnalyzingCombined] = useState(false)
+    const [combinedAnalysisModelId, setCombinedAnalysisModelId] = useState('chat-model-gemini')
+
     const answers = modelResults.map(result => {
         let answer = parseAiAnswer(result.response)
         if (!answer) {
@@ -403,7 +407,56 @@ ${simplifyHtml(result.html)}
     // 獲取選擇的模型數量
     const selectedModelsCount = selectedModelIds.length
 
+    // 綜合分析函數
 
+    async function analyzeCombined() {
+        if (answers.length === 0) return;
+
+        try {
+            setAnalyzingCombined(true);
+            setCombinedAnalysis(null);
+
+            const response = await fetch('/detect-cart/api/analyze-combined', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    html: simplifyHtml(result.html),
+                    answers,
+                    modelId: combinedAnalysisModelId
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => null);
+                let errorMessage = `API 請求失敗: ${response.status}`;
+
+                if (errorData && errorData.error) {
+                    if (typeof errorData.error === 'string') {
+                        errorMessage = errorData.error;
+                    } else if (errorData.error.message) {
+                        errorMessage = errorData.error.message;
+
+                        if (response.status === 429) {
+                            errorMessage = `資源配額已耗盡 (${errorData.error.status}): ${errorData.error.message}`;
+                        }
+                    }
+                }
+
+                throw new Error(errorMessage);
+            }
+
+            const data = await response.json();
+            console.log('combined analysis data', data);
+            setCombinedAnalysis(data.response);
+        } catch (error) {
+            console.error('綜合分析時出錯:', error);
+            setCombinedAnalysis(`分析時出錯: ${error instanceof Error ? error.message : '未知錯誤'}`);
+        } finally {
+            setAnalyzingCombined(false);
+        }
+    }
 
     return (
         <>
@@ -540,7 +593,37 @@ ${simplifyHtml(result.html)}
                             {/* 如果模型結果數量大於1，則顯示多模型分析結果 */}
                             {modelResults.length > 1 && (
                                 <div className="space-y-4">
-                                    <h4 className="font-medium">多模型分析結果:</h4>
+                                    <div className="flex justify-between items-center">
+                                        <h4 className="font-medium">多模型分析結果:</h4>
+                                        {!analyzingCombined && modelResults.filter(r => !r.processing && !r.error).length > 1 && (
+                                            <div className="flex items-center gap-2">
+                                                <select
+                                                    value={combinedAnalysisModelId}
+                                                    onChange={(e) => setCombinedAnalysisModelId(e.target.value)}
+                                                    className="text-sm border rounded px-2 py-1"
+                                                >
+                                                    {chatModels
+                                                        .filter(model => !model.disabled)
+                                                        .map(model => (
+                                                            <option key={model.id} value={model.id}>
+                                                                {model.name}
+                                                            </option>
+                                                        ))
+                                                    }
+                                                </select>
+                                                <button
+                                                    onClick={analyzeCombined}
+                                                    className="bg-indigo-600 text-white hover:bg-indigo-700 px-4 py-2 rounded-md flex items-center gap-2"
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                        <path d="M2 16.1A5 5 0 0 1 5.9 20M2 12.05A9 9 0 0 1 9.95 20M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"></path>
+                                                        <line x1="2" y1="20" x2="2" y2="20"></line>
+                                                    </svg>
+                                                    綜合分析
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
 
                                     {modelResults
                                         .sort((a, b) => a.timestamp - b.timestamp) // 按時間戳排序，最早的在前
@@ -582,6 +665,42 @@ ${simplifyHtml(result.html)}
                                             </div>
                                         ))
                                     }
+
+                                    {/* 綜合分析結果 */}
+                                    {(analyzingCombined || combinedAnalysis) && (
+                                        <div className="mt-6">
+                                            <h4 className="font-medium mb-2">綜合分析結果:</h4>
+                                            <div className={`p-4 ${analyzingCombined ? 'bg-gray-100' : 'bg-green-50'} text-green-800 rounded-md`}>
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <h5 className="font-medium">
+                                                        綜合分析 ({chatModels.find(model => model.id === combinedAnalysisModelId)?.name || combinedAnalysisModelId})
+                                                        {analyzingCombined && <span className="ml-2 text-gray-500">(處理中...)</span>}
+                                                    </h5>
+                                                    {combinedAnalysis && !analyzingCombined && (
+                                                        <button
+                                                            onClick={() => copyToClipboard(combinedAnalysis)}
+                                                            className="text-xs bg-green-200 hover:bg-green-300 px-2 py-1 rounded"
+                                                        >
+                                                            複製
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <div className="whitespace-pre-wrap text-sm">
+                                                    {analyzingCombined ? (
+                                                        <div className="flex items-center">
+                                                            <svg className="animate-spin h-4 w-4 mr-2 text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                            </svg>
+                                                            正在進行綜合分析...
+                                                        </div>
+                                                    ) : (
+                                                        combinedAnalysis
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
