@@ -40,6 +40,32 @@ interface ModelStore {
     setMaxTokens: (tokens: number) => void
 }
 
+const parseAiAnswer = (answer: string) => {
+    const regex = /output:\s*(.+)/g;  // 添加 g 標誌進行全局匹配
+    const matches = [];
+    let match;
+
+    while ((match = regex.exec(answer)) !== null) {
+        matches.push(match[1].trim());
+    }
+
+    // 返回最後一個匹配結果，如果沒有匹配則返回 null
+    return matches.length > 0 ? matches[matches.length - 1] : null;
+}
+
+const parseAiAnswerSecondary = (answer: string) => {
+    //以document.querySelector為特徵抓取document.querySelector('.cart__total-container .heading.h6:nth-of-type(2)')，抓最後一個
+    const regex = /document\.querySelector\('(.+?)'/g;  // 添加 g 標誌，使用非貪婪匹配
+    const matches = [];
+    let match;
+
+    while ((match = regex.exec(answer)) !== null) {
+        matches.push(match[0].trim());
+    }
+
+    // 返回最後一個匹配結果，如果沒有匹配則返回 null
+    return matches.length > 0 ? matches[matches.length - 1] : null;
+}
 
 export function DetectCartForm({ onSubmit }: DetectCartFormProps) {
     const {
@@ -52,6 +78,14 @@ export function DetectCartForm({ onSubmit }: DetectCartFormProps) {
     const [analyzing, setAnalyzing] = useState(false)
     const [aiResponse, setAiResponse] = useState<string | null>(null)
     const [modelResults, setModelResults] = useState<ModelAnalysisResult[]>([])
+    const answers = modelResults.map(result => {
+        let answer = parseAiAnswer(result.response)
+        if (!answer) {
+            answer = parseAiAnswerSecondary(result.response)
+        }
+        return { modelName: result.modelName, answer }
+    })
+    console.log('answers', answers)
     const router = useRouter()
 
     // 簡化 HTML 函數
@@ -356,45 +390,7 @@ ${simplifyHtml(result.html)}
 
         const newWindow = window.open('', '_blank')
         if (newWindow) {
-            newWindow.document.write(`
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>${result.storeName || '購物車'} HTML 預覽</title>
-                    <style>
-                        body {
-                            font-family: monospace;
-                            white-space: pre-wrap;
-                            padding: 20px;
-                        }
-                        .toolbar {
-                            position: fixed;
-                            top: 0;
-                            left: 0;
-                            right: 0;
-                            background: #f0f0f0;
-                            padding: 10px;
-                            border-bottom: 1px solid #ddd;
-                            display: flex;
-                            justify-content: space-between;
-                            align-items: center;
-                        }
-                        .content {
-                            margin-top: 50px;
-                        }
-                    </style>
-                </head>
-                <body>
-                    <div class="toolbar">
-                        <h3>${result.storeName || '購物車'} HTML 內容</h3>
-                        <button onclick="document.execCommand('selectAll'); document.execCommand('copy');">複製全部</button>
-                    </div>
-                    <div class="content">
-                        ${result.html.replace(/</g, '&lt;').replace(/>/g, '&gt;')}
-                    </div>
-                </body>
-                </html>
-            `)
+            newWindow.document.write(result.html)
             newWindow.document.close()
         } else {
             alert('無法打開新視窗，請檢查您的瀏覽器設置。')

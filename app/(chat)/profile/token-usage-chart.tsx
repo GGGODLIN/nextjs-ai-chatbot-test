@@ -20,6 +20,8 @@ export function TokenUsageChart() {
     const [data, setData] = useState<TokenUsageData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [sortField, setSortField] = useState<keyof ModelUsage>('totalTokens');
+    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
     useEffect(() => {
         async function fetchTokenUsage() {
@@ -68,6 +70,31 @@ export function TokenUsageChart() {
         );
     }
 
+    // 排序模型使用數據
+    const sortedModelUsage = [...data.modelUsage].sort((a, b) => {
+        if (sortDirection === 'asc') {
+            return a[sortField] > b[sortField] ? 1 : -1;
+        } else {
+            return a[sortField] < b[sortField] ? 1 : -1;
+        }
+    });
+
+    // 處理排序點擊
+    const handleSort = (field: keyof ModelUsage) => {
+        if (field === sortField) {
+            setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortField(field);
+            setSortDirection('desc'); // 默認降序
+        }
+    };
+
+    // 渲染排序圖標
+    const renderSortIcon = (field: keyof ModelUsage) => {
+        if (field !== sortField) return <span className="ml-1 text-gray-300">⇅</span>;
+        return sortDirection === 'asc' ? <span className="ml-1">↑</span> : <span className="ml-1">↓</span>;
+    };
+
     // 找出最大的 Token 使用量，用於計算百分比
     const maxTokens = Math.max(...data.modelUsage.map(m => m.totalTokens));
 
@@ -79,7 +106,7 @@ export function TokenUsageChart() {
             </div>
 
             <div className="space-y-4">
-                {data.modelUsage.map((model) => (
+                {sortedModelUsage.map((model) => (
                     <div key={model.modelId} className="bg-card p-4 rounded-md border">
                         <div className="flex justify-between items-center mb-2">
                             <h4 className="font-medium">{model.modelName}</h4>
@@ -98,19 +125,39 @@ export function TokenUsageChart() {
                     </div>
                 ))}
             </div>
-
+            {/* 表格 */}
             <div className="overflow-x-auto">
                 <table className="w-full border-collapse">
                     <thead>
                         <tr className="bg-muted">
-                            <th className="px-4 py-2 text-left">模型</th>
-                            <th className="px-4 py-2 text-right">使用次數</th>
-                            <th className="px-4 py-2 text-right">Token 使用量</th>
-                            <th className="px-4 py-2 text-right">平均每次使用</th>
+                            <th
+                                className="px-4 py-2 text-left cursor-pointer hover:bg-muted/80"
+                                onClick={() => handleSort('modelName')}
+                            >
+                                模型 {renderSortIcon('modelName')}
+                            </th>
+                            <th
+                                className="px-4 py-2 text-right cursor-pointer hover:bg-muted/80"
+                                onClick={() => handleSort('count')}
+                            >
+                                使用次數 {renderSortIcon('count')}
+                            </th>
+                            <th
+                                className="px-4 py-2 text-right cursor-pointer hover:bg-muted/80"
+                                onClick={() => handleSort('totalTokens')}
+                            >
+                                Token 使用量 {renderSortIcon('totalTokens')}
+                            </th>
+                            <th
+                                className="px-4 py-2 text-right cursor-pointer hover:bg-muted/80"
+                                onClick={() => handleSort('averageTokens')}
+                            >
+                                平均每次使用 {renderSortIcon('averageTokens')}
+                            </th>
                         </tr>
                     </thead>
                     <tbody>
-                        {data.modelUsage.map((model) => (
+                        {sortedModelUsage.map((model) => (
                             <tr key={model.modelId} className="border-b border-muted">
                                 <td className="px-4 py-2">{model.modelName}</td>
                                 <td className="px-4 py-2 text-right">{model.count}</td>
