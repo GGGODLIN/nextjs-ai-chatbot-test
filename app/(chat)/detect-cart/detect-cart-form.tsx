@@ -3,11 +3,10 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { chatModels } from '@/lib/ai/models'
+import { useModelStore } from '@/lib/store/modelStore'
 
 interface DetectCartFormProps {
     onSubmit: (formData: FormData) => Promise<any>
-    selectedModelId: string
-    selectedModelIds?: string[]
 }
 
 interface CartResult {
@@ -31,48 +30,29 @@ interface ModelAnalysisResult {
     response: string
     error?: string
     timestamp: number
-    processing?: boolean
 }
 
-export function DetectCartForm({ onSubmit, selectedModelId, selectedModelIds = [] }: DetectCartFormProps) {
+// 臨時的 ModelStore 接口，直到我們確認真正的 store 存在
+interface ModelStore {
+    selectedModelId: string
+    selectedModelIds: string[]
+    maxTokens: number
+    setMaxTokens: (tokens: number) => void
+}
+
+
+export function DetectCartForm({ onSubmit }: DetectCartFormProps) {
+    const {
+        selectedModelId,
+        selectedModelIds,
+    } = useModelStore();
+
     const [result, setResult] = useState<CartResult | null>(null)
     const [loading, setLoading] = useState(false)
     const [analyzing, setAnalyzing] = useState(false)
     const [aiResponse, setAiResponse] = useState<string | null>(null)
-    const [currentModelId, setCurrentModelId] = useState(selectedModelId)
-    const [localModelIds, setLocalModelIds] = useState<string[]>(selectedModelIds)
     const [modelResults, setModelResults] = useState<ModelAnalysisResult[]>([])
     const router = useRouter()
-
-    // 當 selectedModelId 變化時更新 currentModelId
-    useEffect(() => {
-        setCurrentModelId(selectedModelId)
-    }, [selectedModelId])
-
-    // 當 selectedModelIds 變化時更新 localModelIds
-    useEffect(() => {
-        setLocalModelIds(selectedModelIds)
-    }, [selectedModelIds])
-
-    // 獲取選擇的多個模型
-    useEffect(() => {
-        // 如果沒有提供 selectedModelIds，則嘗試從 localStorage 獲取
-        if (selectedModelIds.length === 0) {
-            try {
-                const storedModels = localStorage.getItem('detect-cart-models')
-                if (storedModels) {
-                    const parsedModels = JSON.parse(storedModels)
-                    setLocalModelIds(parsedModels)
-                } else {
-                    // 如果沒有存儲的模型，則使用當前模型
-                    setLocalModelIds([currentModelId])
-                }
-            } catch (error) {
-                console.error('獲取選擇的模型時出錯:', error)
-                setLocalModelIds([currentModelId])
-            }
-        }
-    }, [currentModelId, selectedModelIds])
 
     async function handleSubmit(formData: FormData) {
         try {
@@ -92,42 +72,17 @@ export function DetectCartForm({ onSubmit, selectedModelId, selectedModelIds = [
         }
     }
 
-    // 簡化 HTML 函數
-    function simplifyHtml(html: string): string {
-        let simplifiedHtml = html;
-
-        // 提取<body>標籤內的內容
-        const bodyMatch = simplifiedHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-        if (bodyMatch && bodyMatch[1]) {
-            simplifiedHtml = bodyMatch[1].trim();
-        }
-
-        // 移除所有<script>標籤內的內容
-        simplifiedHtml = simplifiedHtml.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
-
-        // 移除所有<style>標籤內的內容
-        simplifiedHtml = simplifiedHtml.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
-
-        // 移除所有<svg>標籤內的內容
-        simplifiedHtml = simplifiedHtml.replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, '');
-
-        return simplifiedHtml;
-    }
-
     async function analyzeHtmlWithAI() {
         if (!result?.html) return
-
-        const html = simplifyHtml(result.html);
 
         try {
             setAnalyzing(true)
             setAiResponse(null)
-            setModelResults([])
 
             const prompt = `分析以下 Shopify 購物車 HTML，判斷 subtotal element 有可能是哪個，給出 querySelector：
 
 \`\`\`html
-${html}
+${result.html}
 \`\`\``
 
             const response = await fetch('/detect-cart/api/analyze-html', {
@@ -137,7 +92,8 @@ ${html}
                 },
                 body: JSON.stringify({
                     prompt,
-                    model: currentModelId
+                    model: selectedModelId,
+                    max_tokens: maxTokens
                 })
             })
 
@@ -162,14 +118,14 @@ ${html}
             }
 
             const data = await response.json()
-            console.log('data', data)
             setAiResponse(data.response)
 
-            // 添加到模型結果中，刪除所有舊資料，只保留最新結果
-            const modelName = chatModels.find(model => model.id === currentModelId)?.name || currentModelId
-            setModelResults([
+            // 添加到模型結果中
+            const modelName = chatModels.find(model => model.id === selectedModelId)?.name || selectedModelId
+            setModelResults(prev => [
+                ...prev.filter(r => r.modelId !== selectedModelId), // 移除相同模型的舊結果
                 {
-                    modelId: currentModelId,
+                    modelId: selectedModelId,
                     modelName,
                     response: data.response,
                     timestamp: Date.now()
@@ -180,11 +136,11 @@ ${html}
             setAiResponse(`分析時出錯: ${error instanceof Error ? error.message : '未知錯誤'}`)
 
             // 添加錯誤到模型結果中
-            const modelName = chatModels.find(model => model.id === currentModelId)?.name || currentModelId
+            const modelName = chatModels.find(model => model.id === selectedModelId)?.name || selectedModelId
             setModelResults(prev => [
-                ...prev.filter(r => r.modelId !== currentModelId), // 移除相同模型的舊結果
+                ...prev.filter(r => r.modelId !== selectedModelId), // 移除相同模型的舊結果
                 {
-                    modelId: currentModelId,
+                    modelId: selectedModelId,
                     modelName,
                     response: '',
                     error: error instanceof Error ? error.message : '未知錯誤',
@@ -198,7 +154,7 @@ ${html}
 
     // 使用所有選擇的模型分析 HTML
     async function analyzeWithAllModels() {
-        if (!result?.html || localModelIds.length === 0) return
+        if (!result?.html || selectedModelIds.length === 0) return
 
         setAnalyzing(true)
         setAiResponse(null)
@@ -206,15 +162,15 @@ ${html}
         const prompt = `分析以下 Shopify 購物車 HTML，判斷 subtotal element 有可能是哪個，給出 querySelector：
 
 \`\`\`html
-${simplifyHtml(result.html)}
+${result.html}
 \`\`\``
 
         // 創建一個新的結果數組，保留不在當前選擇中的模型結果
-        const newResults = modelResults.filter(r => !localModelIds.includes(r.modelId))
+        const newResults = modelResults.filter(r => !selectedModelIds.includes(r.modelId))
         setModelResults(newResults)
 
         // 過濾掉禁用的模型
-        const enabledModelIds = localModelIds.filter(modelId =>
+        const enabledModelIds = selectedModelIds.filter(modelId =>
             !chatModels.find(model => model.id === modelId)?.disabled
         )
 
@@ -224,40 +180,8 @@ ${simplifyHtml(result.html)}
             return
         }
 
-        // 為禁用的模型添加錯誤信息
-        const disabledResults = localModelIds
-            .filter(modelId => chatModels.find(model => model.id === modelId)?.disabled)
-            .map(modelId => {
-                const model = chatModels.find(m => m.id === modelId)
-                return {
-                    modelId,
-                    modelName: model?.name || modelId,
-                    response: '',
-                    error: model?.disabledReason || '此模型暫時不可用',
-                    timestamp: Date.now()
-                }
-            })
-
-        // 先添加禁用的模型結果
-        setModelResults(prev => [...prev, ...disabledResults])
-
-        // 為每個啟用的模型創建處理中狀態
-        const processingResults = enabledModelIds.map(modelId => {
-            const modelName = chatModels.find(model => model.id === modelId)?.name || modelId
-            return {
-                modelId,
-                modelName,
-                response: '',
-                processing: true,
-                timestamp: Date.now()
-            }
-        })
-
-        // 添加處理中的狀態
-        setModelResults(prev => [...prev, ...processingResults])
-
         // 為每個選擇的模型創建一個分析請求
-        enabledModelIds.forEach(async (modelId) => {
+        const analysisPromises = enabledModelIds.map(async (modelId: string) => {
             try {
                 const response = await fetch('/detect-cart/api/analyze-html', {
                     method: 'POST',
@@ -267,7 +191,7 @@ ${simplifyHtml(result.html)}
                     body: JSON.stringify({
                         prompt,
                         model: modelId,
-                        max_tokens: 1000 // 使用默認值，因為 maxTokens 未定義
+                        max_tokens: maxTokens
                     })
                 })
 
@@ -293,39 +217,45 @@ ${simplifyHtml(result.html)}
                 const data = await response.json()
                 const modelName = chatModels.find(model => model.id === modelId)?.name || modelId
 
-                // 更新這個特定模型的結果
-                setModelResults(prev => prev.map(item =>
-                    item.modelId === modelId
-                        ? {
-                            modelId,
-                            modelName,
-                            response: data.response,
-                            timestamp: Date.now(),
-                            processing: false
-                        }
-                        : item
-                ))
+                return {
+                    modelId,
+                    modelName,
+                    response: data.response,
+                    timestamp: Date.now()
+                }
             } catch (error) {
                 console.error(`使用模型 ${modelId} 分析時出錯:`, error)
                 const modelName = chatModels.find(model => model.id === modelId)?.name || modelId
 
-                // 更新這個特定模型的錯誤結果
-                setModelResults(prev => prev.map(item =>
-                    item.modelId === modelId
-                        ? {
-                            modelId,
-                            modelName,
-                            response: '',
-                            error: error instanceof Error ? error.message : '未知錯誤',
-                            timestamp: Date.now(),
-                            processing: false
-                        }
-                        : item
-                ))
+                return {
+                    modelId,
+                    modelName,
+                    response: '',
+                    error: error instanceof Error ? error.message : '未知錯誤',
+                    timestamp: Date.now()
+                }
             }
         })
 
-        // 所有請求已經啟動，但可能還沒完成
+        // 為禁用的模型添加錯誤信息
+        const disabledResults = selectedModelIds
+            .filter(modelId => chatModels.find(model => model.id === modelId)?.disabled)
+            .map((modelId: string) => {
+                const model = chatModels.find(m => m.id === modelId)
+                return {
+                    modelId,
+                    modelName: model?.name || modelId,
+                    response: '',
+                    error: model?.disabledReason || '此模型暫時不可用',
+                    timestamp: Date.now()
+                }
+            })
+
+        // 等待所有請求完成
+        const results = await Promise.all(analysisPromises)
+
+        // 更新結果，包括禁用模型的錯誤信息
+        setModelResults(prev => [...prev, ...results, ...disabledResults])
         setAnalyzing(false)
     }
 
@@ -346,7 +276,45 @@ ${simplifyHtml(result.html)}
 
         const newWindow = window.open('', '_blank')
         if (newWindow) {
-            newWindow.document.write(result.html)
+            newWindow.document.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>${result.storeName || '購物車'} HTML 預覽</title>
+                    <style>
+                        body {
+                            font-family: monospace;
+                            white-space: pre-wrap;
+                            padding: 20px;
+                        }
+                        .toolbar {
+                            position: fixed;
+                            top: 0;
+                            left: 0;
+                            right: 0;
+                            background: #f0f0f0;
+                            padding: 10px;
+                            border-bottom: 1px solid #ddd;
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
+                        }
+                        .content {
+                            margin-top: 50px;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="toolbar">
+                        <h3>${result.storeName || '購物車'} HTML 內容</h3>
+                        <button onclick="document.execCommand('selectAll'); document.execCommand('copy');">複製全部</button>
+                    </div>
+                    <div class="content">
+                        ${result.html.replace(/</g, '&lt;').replace(/>/g, '&gt;')}
+                    </div>
+                </body>
+                </html>
+            `)
             newWindow.document.close()
         } else {
             alert('無法打開新視窗，請檢查您的瀏覽器設置。')
@@ -354,10 +322,12 @@ ${simplifyHtml(result.html)}
     }
 
     // 獲取當前模型的名稱
-    const currentModelName = chatModels.find(model => model.id === currentModelId)?.name || currentModelId
+    const currentModelName = chatModels.find(model => model.id === selectedModelId)?.name || selectedModelId
 
     // 獲取選擇的模型數量
-    const selectedModelsCount = localModelIds.length
+    const selectedModelsCount = selectedModelIds.length
+
+
 
     return (
         <>
@@ -398,9 +368,10 @@ ${simplifyHtml(result.html)}
                                 </div>
                             </div>
 
+
                             {result.html && (
                                 <div className="flex flex-wrap justify-center gap-2">
-                                    {selectedModelsCount === 1 && <button
+                                    <button
                                         onClick={analyzeHtmlWithAI}
                                         disabled={analyzing}
                                         className="bg-green-600 text-white hover:bg-green-700 px-4 py-2 rounded-md flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -423,7 +394,7 @@ ${simplifyHtml(result.html)}
                                                 使用 {currentModelName} 分析 HTML
                                             </>
                                         )}
-                                    </button>}
+                                    </button>
 
                                     {selectedModelsCount > 1 && (
                                         <button
@@ -490,34 +461,17 @@ ${simplifyHtml(result.html)}
                             )}
 
                             {/* 顯示多模型分析結果 */}
-                            {modelResults.length > 1 && (
+                            {modelResults.length > 0 && (
                                 <div className="space-y-4">
                                     <h4 className="font-medium">多模型分析結果:</h4>
 
                                     {modelResults
-                                        // 按照處理狀態排序，處理中的放在後面
-                                        .sort((a, b) => {
-                                            // 如果一個在處理中而另一個不是，處理中的放後面
-                                            if (a.processing && !b.processing) return 1;
-                                            if (!a.processing && b.processing) return -1;
-                                            // 否則按時間戳排序，新的在後面
-                                            return a.timestamp - b.timestamp;
-                                        })
+                                        .sort((a, b) => b.timestamp - a.timestamp) // 按時間戳排序，最新的在前
                                         .map((result, index) => (
                                             <div key={`${result.modelId}-${result.timestamp}`} className="p-4 bg-blue-50 text-blue-800 rounded-md">
                                                 <div className="flex justify-between items-center mb-2">
-                                                    <h5 className="font-medium">
-                                                        {result.modelName}
-                                                        {result.processing && (
-                                                            <span className="ml-2 inline-block">
-                                                                <svg className="animate-spin h-4 w-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                                                </svg>
-                                                            </span>
-                                                        )}
-                                                    </h5>
-                                                    {!result.processing && result.response && (
+                                                    <h5 className="font-medium">{result.modelName}:</h5>
+                                                    {result.response && (
                                                         <button
                                                             onClick={() => copyToClipboard(result.response)}
                                                             className="text-xs bg-blue-200 hover:bg-blue-300 px-2 py-1 rounded"
@@ -531,9 +485,7 @@ ${simplifyHtml(result.html)}
                                                         錯誤: {result.error}
                                                     </div>
                                                 ) : (
-                                                    <div className="whitespace-pre-wrap text-sm">
-                                                        {result.processing ? '分析中...' : result.response}
-                                                    </div>
+                                                    <div className="whitespace-pre-wrap text-sm">{result.response}</div>
                                                 )}
                                             </div>
                                         ))
@@ -559,7 +511,8 @@ ${simplifyHtml(result.html)}
                                     <div>重定向次數: {result.redirectCount}</div>
                                     <div className="truncate">最終 URL: {result.finalUrl}</div>
                                     <div>HTML 長度: {result.html?.length || 0} 字符</div>
-                                    <div>選擇的模型: {localModelIds.map(id => chatModels.find(m => m.id === id)?.name || id).join(', ')}</div>
+                                    <div>選擇的模型: {selectedModelIds.map((id: string) => chatModels.find(m => m.id === id)?.name || id).join(', ')}</div>
+                                    <div>Max Tokens: {maxTokens}</div>
                                 </div>
                             </details>
                         </div>

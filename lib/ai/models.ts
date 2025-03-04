@@ -36,7 +36,7 @@ export const myProvider = customProvider({
   },
 });
 
-interface ChatModel {
+export interface ChatModel {
   id: string;
   name: string;
   description: string;

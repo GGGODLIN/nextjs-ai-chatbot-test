@@ -1,6 +1,6 @@
 'use client';
 
-import { startTransition, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -17,55 +17,27 @@ import {
 } from '@/components/ui/tooltip';
 import { chatModels } from '@/lib/ai/models';
 import { cn } from '@/lib/utils';
-import { saveDetectCartModelsAsCookie } from '@/app/(chat)/detect-cart/actions';
+import { useModelStore } from '@/lib/store/modelStore';
 
 import { CheckCircleFillIcon, ChevronDownIcon } from './icons';
 
 export function MultiModelSelector({
-    selectedModelIds,
     className,
-}: {
-    selectedModelIds: string[];
-} & React.ComponentProps<typeof Button>) {
-    const [open, setOpen] = useState(false);
-    const [optimisticModelIds, setOptimisticModelIds] = useState<string[]>(selectedModelIds);
+}: React.ComponentProps<typeof Button>) {
+    const {
+        selectedModelIds,
+        toggleModelSelection,
+        setSelectedModelIds
+    } = useModelStore();
 
-    // 當 selectedModelIds 變化時更新 optimisticModelIds
-    useEffect(() => {
-        setOptimisticModelIds(selectedModelIds);
-    }, [selectedModelIds]);
+    const [open, setOpen] = useState(false);
 
     // 獲取已選模型的名稱
-    const selectedModelsText = optimisticModelIds.length > 0
-        ? optimisticModelIds.length === 1
-            ? chatModels.find(model => model.id === optimisticModelIds[0])?.name || '已選擇 1 個模型'
-            : `已選擇 ${optimisticModelIds.length} 個模型`
+    const selectedModelsText = selectedModelIds.length > 0
+        ? selectedModelIds.length === 1
+            ? chatModels.find(model => model.id === selectedModelIds[0])?.name || '已選擇 1 個模型'
+            : `已選擇 ${selectedModelIds.length} 個模型`
         : '選擇模型';
-
-    // 切換模型選擇狀態
-    const toggleModelSelection = (modelId: string) => {
-        // 檢查是否嘗試取消選擇最後一個模型
-        if (optimisticModelIds.includes(modelId) && optimisticModelIds.length === 1) {
-            // 如果是最後一個模型，不允許取消選擇
-            return;
-        }
-
-        // 檢查模型是否被禁用
-        const model = chatModels.find(m => m.id === modelId);
-        if (model?.disabled) {
-            return; // 如果模型被禁用，不執行任何操作
-        }
-
-        const newSelection = optimisticModelIds.includes(modelId)
-            ? optimisticModelIds.filter(id => id !== modelId)
-            : [...optimisticModelIds, modelId];
-
-        setOptimisticModelIds(newSelection);
-
-        startTransition(() => {
-            saveDetectCartModelsAsCookie(newSelection);
-        });
-    };
 
     return (
         <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -84,7 +56,7 @@ export function MultiModelSelector({
             <DropdownMenuContent align="start" className="min-w-[300px]">
                 {chatModels.map((chatModel) => {
                     const { id, disabled, disabledReason } = chatModel;
-                    const isSelected = optimisticModelIds.includes(id);
+                    const isSelected = selectedModelIds.includes(id);
 
                     // 為禁用的模型創建帶有提示的菜單項
                     if (disabled) {
