@@ -1,9 +1,10 @@
 'use client';
-import { ChevronUp } from 'lucide-react';
+import { ChevronUp, User } from 'lucide-react';
 import Image from 'next/image';
-import type { User } from 'next-auth';
+import type { User as NextAuthUser } from 'next-auth';
 import { signOut } from 'next-auth/react';
 import { useTheme } from 'next-themes';
+import Link from 'next/link';
 
 import {
   DropdownMenu,
@@ -18,7 +19,7 @@ import {
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
 
-export function SidebarUserNav({ user }: { user: User }) {
+export function SidebarUserNav({ user }: { user: NextAuthUser }) {
   const { setTheme, theme } = useTheme();
 
   return (
@@ -46,7 +47,14 @@ export function SidebarUserNav({ user }: { user: User }) {
               className="cursor-pointer"
               onSelect={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             >
-              {`Toggle ${theme === 'light' ? 'dark' : 'light'} mode`}
+              {`切換${theme === 'light' ? '深色' : '淺色'}模式`}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link href="/profile" className="w-full cursor-pointer flex items-center">
+                <User className="mr-2 h-4 w-4" />
+                個人資料
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
@@ -59,7 +67,7 @@ export function SidebarUserNav({ user }: { user: User }) {
                   });
                 }}
               >
-                Sign out
+                登出
               </button>
             </DropdownMenuItem>
           </DropdownMenuContent>
