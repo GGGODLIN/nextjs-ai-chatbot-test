@@ -32,9 +32,6 @@ export default async function DetectCartPage() {
                 <div className="flex items-center justify-between">
                     <div className="flex flex-col gap-2">
                         <h1 className="text-2xl font-bold">購物車小計檢測</h1>
-                        <p className="text-muted-foreground">
-                            上傳圖片來檢測購物車小計金額
-                        </p>
                     </div>
                 </div>
 
