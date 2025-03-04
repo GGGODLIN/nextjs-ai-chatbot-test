@@ -36,7 +36,6 @@ interface ModelAnalysisResult {
 interface ModelStore {
     selectedModelId: string
     selectedModelIds: string[]
-    maxTokens: number
     setMaxTokens: (tokens: number) => void
 }
 
@@ -53,6 +52,28 @@ export function DetectCartForm({ onSubmit }: DetectCartFormProps) {
     const [aiResponse, setAiResponse] = useState<string | null>(null)
     const [modelResults, setModelResults] = useState<ModelAnalysisResult[]>([])
     const router = useRouter()
+
+    // 簡化 HTML 函數
+    function simplifyHtml(html: string): string {
+        let simplifiedHtml = html;
+
+        // 提取<body>標籤內的內容
+        const bodyMatch = simplifiedHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+        if (bodyMatch && bodyMatch[1]) {
+            simplifiedHtml = bodyMatch[1].trim();
+        }
+
+        // 移除所有<script>標籤內的內容
+        simplifiedHtml = simplifiedHtml.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+
+        // 移除所有<style>標籤內的內容
+        simplifiedHtml = simplifiedHtml.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+
+        // 移除所有<svg>標籤內的內容
+        simplifiedHtml = simplifiedHtml.replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, '');
+
+        return simplifiedHtml;
+    }
 
     async function handleSubmit(formData: FormData) {
         try {
@@ -82,7 +103,7 @@ export function DetectCartForm({ onSubmit }: DetectCartFormProps) {
             const prompt = `分析以下 Shopify 購物車 HTML，判斷 subtotal element 有可能是哪個，給出 querySelector：
 
 \`\`\`html
-${result.html}
+${simplifyHtml(result.html)}
 \`\`\``
 
             const response = await fetch('/detect-cart/api/analyze-html', {
@@ -92,8 +113,7 @@ ${result.html}
                 },
                 body: JSON.stringify({
                     prompt,
-                    model: selectedModelId,
-                    max_tokens: maxTokens
+                    model: selectedModelId
                 })
             })
 
@@ -118,6 +138,8 @@ ${result.html}
             }
 
             const data = await response.json()
+            console.log('data', selectedModelId, data)
+            //將data?.usage?.totalTokens 和selectedModelId 存成一組key-value，準備存進db
             setAiResponse(data.response)
 
             // 添加到模型結果中
@@ -162,7 +184,7 @@ ${result.html}
         const prompt = `分析以下 Shopify 購物車 HTML，判斷 subtotal element 有可能是哪個，給出 querySelector：
 
 \`\`\`html
-${result.html}
+${simplifyHtml(result.html)}
 \`\`\``
 
         // 創建一個新的結果數組，保留不在當前選擇中的模型結果
@@ -180,9 +202,39 @@ ${result.html}
             return
         }
 
-        // 為每個選擇的模型創建一個分析請求
-        const analysisPromises = enabledModelIds.map(async (modelId: string) => {
+        // 為禁用的模型添加錯誤信息
+        const disabledResults = selectedModelIds
+            .filter(modelId => chatModels.find(model => model.id === modelId)?.disabled)
+            .map((modelId: string) => {
+                const model = chatModels.find(m => m.id === modelId)
+                return {
+                    modelId,
+                    modelName: model?.name || modelId,
+                    response: '',
+                    error: model?.disabledReason || '此模型暫時不可用',
+                    timestamp: Date.now()
+                }
+            })
+
+        // 立即更新禁用模型的結果
+        setModelResults(prev => [...prev, ...disabledResults])
+
+        // 為每個選擇的模型創建一個分析請求，但不等待所有請求完成
+        enabledModelIds.forEach(async (modelId: string) => {
             try {
+                // 先添加一個"處理中"的結果
+                const modelName = chatModels.find(model => model.id === modelId)?.name || modelId
+                setModelResults(prev => [
+                    ...prev.filter(r => r.modelId !== modelId), // 移除相同模型的舊結果
+                    {
+                        modelId,
+                        modelName,
+                        response: '處理中...',
+                        processing: true,
+                        timestamp: Date.now()
+                    }
+                ])
+
                 const response = await fetch('/detect-cart/api/analyze-html', {
                     method: 'POST',
                     headers: {
@@ -190,8 +242,7 @@ ${result.html}
                     },
                     body: JSON.stringify({
                         prompt,
-                        model: modelId,
-                        max_tokens: maxTokens
+                        model: modelId
                     })
                 })
 
@@ -215,47 +266,37 @@ ${result.html}
                 }
 
                 const data = await response.json()
-                const modelName = chatModels.find(model => model.id === modelId)?.name || modelId
+                console.log('datas', modelId, data)
 
-                return {
-                    modelId,
-                    modelName,
-                    response: data.response,
-                    timestamp: Date.now()
-                }
+                // 更新這個模型的結果
+                setModelResults(prev => [
+                    ...prev.filter(r => r.modelId !== modelId), // 移除相同模型的舊結果
+                    {
+                        modelId,
+                        modelName,
+                        response: data.response,
+                        timestamp: Date.now()
+                    }
+                ])
             } catch (error) {
                 console.error(`使用模型 ${modelId} 分析時出錯:`, error)
                 const modelName = chatModels.find(model => model.id === modelId)?.name || modelId
 
-                return {
-                    modelId,
-                    modelName,
-                    response: '',
-                    error: error instanceof Error ? error.message : '未知錯誤',
-                    timestamp: Date.now()
-                }
+                // 更新這個模型的錯誤結果
+                setModelResults(prev => [
+                    ...prev.filter(r => r.modelId !== modelId), // 移除相同模型的舊結果
+                    {
+                        modelId,
+                        modelName,
+                        response: '',
+                        error: error instanceof Error ? error.message : '未知錯誤',
+                        timestamp: Date.now()
+                    }
+                ])
             }
         })
 
-        // 為禁用的模型添加錯誤信息
-        const disabledResults = selectedModelIds
-            .filter(modelId => chatModels.find(model => model.id === modelId)?.disabled)
-            .map((modelId: string) => {
-                const model = chatModels.find(m => m.id === modelId)
-                return {
-                    modelId,
-                    modelName: model?.name || modelId,
-                    response: '',
-                    error: model?.disabledReason || '此模型暫時不可用',
-                    timestamp: Date.now()
-                }
-            })
-
-        // 等待所有請求完成
-        const results = await Promise.all(analysisPromises)
-
-        // 更新結果，包括禁用模型的錯誤信息
-        setModelResults(prev => [...prev, ...results, ...disabledResults])
+        // 所有請求已經啟動，但可能還沒完成
         setAnalyzing(false)
     }
 
@@ -461,17 +502,21 @@ ${result.html}
                             )}
 
                             {/* 顯示多模型分析結果 */}
-                            {modelResults.length > 0 && (
+                            {/* 如果模型結果數量大於1，則顯示多模型分析結果 */}
+                            {modelResults.length > 1 && (
                                 <div className="space-y-4">
                                     <h4 className="font-medium">多模型分析結果:</h4>
 
                                     {modelResults
-                                        .sort((a, b) => b.timestamp - a.timestamp) // 按時間戳排序，最新的在前
+                                        .sort((a, b) => a.timestamp - b.timestamp) // 按時間戳排序，最早的在前
                                         .map((result, index) => (
-                                            <div key={`${result.modelId}-${result.timestamp}`} className="p-4 bg-blue-50 text-blue-800 rounded-md">
+                                            <div key={`${result.modelId}-${result.timestamp}`} className={`p-4 ${result.processing ? 'bg-gray-100' : 'bg-blue-50'} text-blue-800 rounded-md`}>
                                                 <div className="flex justify-between items-center mb-2">
-                                                    <h5 className="font-medium">{result.modelName}:</h5>
-                                                    {result.response && (
+                                                    <h5 className="font-medium">
+                                                        {result.modelName}
+                                                        {result.processing && <span className="ml-2 text-gray-500">(處理中...)</span>}
+                                                    </h5>
+                                                    {result.response && !result.processing && (
                                                         <button
                                                             onClick={() => copyToClipboard(result.response)}
                                                             className="text-xs bg-blue-200 hover:bg-blue-300 px-2 py-1 rounded"
@@ -485,7 +530,19 @@ ${result.html}
                                                         錯誤: {result.error}
                                                     </div>
                                                 ) : (
-                                                    <div className="whitespace-pre-wrap text-sm">{result.response}</div>
+                                                    <div className="whitespace-pre-wrap text-sm">
+                                                        {result.processing ? (
+                                                            <div className="flex items-center">
+                                                                <svg className="animate-spin h-4 w-4 mr-2 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                </svg>
+                                                                正在分析中...
+                                                            </div>
+                                                        ) : (
+                                                            result.response
+                                                        )}
+                                                    </div>
                                                 )}
                                             </div>
                                         ))
@@ -512,7 +569,6 @@ ${result.html}
                                     <div className="truncate">最終 URL: {result.finalUrl}</div>
                                     <div>HTML 長度: {result.html?.length || 0} 字符</div>
                                     <div>選擇的模型: {selectedModelIds.map((id: string) => chatModels.find(m => m.id === id)?.name || id).join(', ')}</div>
-                                    <div>Max Tokens: {maxTokens}</div>
                                 </div>
                             </details>
                         </div>
