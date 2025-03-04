@@ -30,6 +30,7 @@ interface ModelAnalysisResult {
     response: string
     error?: string
     timestamp: number
+    processing?: boolean
 }
 
 // 臨時的 ModelStore 接口，直到我們確認真正的 store 存在
@@ -140,6 +141,24 @@ ${simplifyHtml(result.html)}
             const data = await response.json()
             console.log('data', selectedModelId, data)
             //將data?.usage?.totalTokens 和selectedModelId 存成一組key-value，準備存進db
+            if (data?.usage?.totalTokens) {
+                try {
+                    await fetch('/detect-cart/api/save-token-usage', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            modelId: selectedModelId,
+                            totalTokens: data.usage.totalTokens,
+                            timestamp: Date.now()
+                        })
+                    });
+                    console.log('Token 使用量已儲存', selectedModelId, data.usage.totalTokens);
+                } catch (error) {
+                    console.error('儲存 Token 使用量時出錯:', error);
+                }
+            }
             setAiResponse(data.response)
 
             // 添加到模型結果中
@@ -267,6 +286,26 @@ ${simplifyHtml(result.html)}
 
                 const data = await response.json()
                 console.log('datas', modelId, data)
+
+                // 儲存 token 使用量
+                if (data?.usage?.totalTokens) {
+                    try {
+                        await fetch('/detect-cart/api/save-token-usage', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                modelId: modelId,
+                                totalTokens: data.usage.totalTokens,
+                                timestamp: Date.now()
+                            })
+                        });
+                        console.log('Token 使用量已儲存', modelId, data.usage.totalTokens);
+                    } catch (error) {
+                        console.error('儲存 Token 使用量時出錯:', error);
+                    }
+                }
 
                 // 更新這個模型的結果
                 setModelResults(prev => [

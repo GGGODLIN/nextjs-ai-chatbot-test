@@ -15,6 +15,7 @@ import {
   type Message,
   message,
   vote,
+  tokenUsage,
 } from './schema';
 import { ArtifactKind } from '@/components/artifact';
 
@@ -345,4 +346,37 @@ export async function updateChatVisiblityById({
     console.error('Failed to update chat visibility in database');
     throw error;
   }
+}
+
+export async function saveTokenUsage({
+  modelId,
+  totalTokens,
+  timestamp,
+  userId,
+}: {
+  modelId: string;
+  totalTokens: number;
+  timestamp: number;
+  userId?: string;
+}) {
+  return db.insert(tokenUsage).values({
+    modelId,
+    totalTokens: totalTokens.toString(),
+    timestamp: new Date(timestamp),
+    userId: userId || null,
+  });
+}
+
+export async function getTokenUsageByModel(modelId: string) {
+  return db
+    .select()
+    .from(tokenUsage)
+    .where(eq(tokenUsage.modelId, modelId));
+}
+
+export async function getTokenUsageByUser(userId: string) {
+  return db
+    .select()
+    .from(tokenUsage)
+    .where(eq(tokenUsage.userId, userId));
 }

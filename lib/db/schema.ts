@@ -113,3 +113,14 @@ export const suggestion = pgTable(
 );
 
 export type Suggestion = InferSelectModel<typeof suggestion>;
+
+export const tokenUsage = pgTable('TokenUsage', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  modelId: varchar('modelId', { length: 64 }).notNull(),
+  totalTokens: text('totalTokens').notNull(),
+  timestamp: timestamp('timestamp').notNull(),
+  userId: uuid('userId')
+    .references(() => user.id),
+});
+
+export type TokenUsage = InferSelectModel<typeof tokenUsage>;
